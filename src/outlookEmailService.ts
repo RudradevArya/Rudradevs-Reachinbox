@@ -1,18 +1,33 @@
 import { getOutlookClient } from './outlookAuthService';
 import { categorizeEmail, generateResponse } from './aiService';
+import { GraphError } from '@microsoft/microsoft-graph-client';
+
 
 export const getLatestEmail = async () => {
   const client = getOutlookClient();
-  const messages = await client.api('/users/me/messages')
-    .filter('isRead eq false')
-    .top(1)
-    .get();
+  try {
+    const messages = await client.api('/users/me/messages')
+      .filter('isRead eq false')
+      .top(1)
+      .get();
 
-  if (!messages.value || messages.value.length === 0) {
-    throw new Error('No unread messages found');
+    if (!messages.value || messages.value.length === 0) {
+      throw new Error('No unread messages found');
+    }
+
+    return messages.value[0];
+  } catch (error) {
+    console.error('Error fetching latest email:', error);
+    if (error instanceof GraphError) {
+      console.error('GraphError details:', {
+        statusCode: error.statusCode,
+        code: error.code,
+        message: error.message,
+        requestId: error.requestId,
+      });
+    }
+    throw error;
   }
-
-  return messages.value[0];
 };
 
 export const sendEmail = async (to: string, subject: string, body: string) => {
@@ -62,6 +77,14 @@ export const processEmail = async () => {
     return `Email processed. Category: ${category}, Response sent to: ${sender}`;
   } catch (error) {
     console.error('Error processing email:', error);
+    if (error instanceof GraphError) {
+      console.error('GraphError details:', {
+        statusCode: error.statusCode,
+        code: error.code,
+        message: error.message,
+        requestId: error.requestId,
+      });
+    }
     return 'Error processing email';
   }
 };

@@ -1,12 +1,12 @@
 import { ConfidentialClientApplication, Configuration, AuthorizationUrlRequest, AuthorizationCodeRequest } from "@azure/msal-node";
-import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
-import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
 import { config } from './config';
 
 if (!config.outlook.clientId || !config.outlook.clientSecret || !config.outlook.tenantId || !config.outlook.redirectUri) {
   throw new Error('Outlook configuration is incomplete. Please check your .env file.');
 }
+
+let accessToken: string | null = null;
 
 const msalConfig: Configuration = {
   auth: {
@@ -17,7 +17,7 @@ const msalConfig: Configuration = {
 };
 
 const pca = new ConfidentialClientApplication(msalConfig);
-const redirectUri = config.outlook.redirectUri as string;
+const redirectUri = config.outlook.redirectUri;
 
 export const getOutlookAuthUrl = async () => {
   const authCodeUrlParameters: AuthorizationUrlRequest = {
@@ -34,25 +34,38 @@ export const getOutlookToken = async (code: string) => {
     scopes: ["https://graph.microsoft.com/.default"],
     redirectUri: redirectUri,
   };
-
-  const response = await pca.acquireTokenByCode(tokenRequest);
-  return response.accessToken;
+  
+  try {
+    const response = await pca.acquireTokenByCode(tokenRequest);
+    accessToken = response.accessToken;
+    console.log('Token acquired successfully');
+    return accessToken;
+  } catch (error) {
+    console.error('Error acquiring token:', error);
+    throw error;
+  }
 };
 
-const credential = new ClientSecretCredential(
-  config.outlook.tenantId,
-  config.outlook.clientId,
-  config.outlook.clientSecret
-);
-
-const authProvider = new TokenCredentialAuthenticationProvider(credential, {
-  scopes: ['https://graph.microsoft.com/.default']
-});
-
-const graphClient = Client.initWithMiddleware({
-  authProvider: authProvider
-});
-
 export const getOutlookClient = () => {
-  return graphClient;
+  if (!accessToken) {
+    console.error('Access token not available. Please authenticate first.');
+    throw new Error('Access token not available. Please authenticate first.');
+  }
+  return Client.init({
+    authProvider: (done) => {
+      done(null, accessToken);
+    }
+  });
+};
+
+export const verifyOutlookToken = async () => {
+  try {
+    const client = getOutlookClient();
+    const result = await client.api('/me').get();
+    console.log('Token verification successful:', result);
+    return true;
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return false;
+  }
 };
