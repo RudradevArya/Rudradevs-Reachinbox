@@ -1,18 +1,21 @@
+// //emailService.ts
 import { google } from 'googleapis';
 import { oauth2Client } from './authService';
+import { categorizeEmail, generateResponse } from './aiService';
 
 const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-export const getLatestEmail = async () => {
+export const getLatestEmailFromSender = async (senderEmail: string) => {
   const response = await gmail.users.messages.list({
     userId: 'me',
+    q: `from:${senderEmail} is:unread`,
     maxResults: 1,
   });
 
-  const messageId = response.data.messages?.[0].id;
+  const messageId = response.data.messages?.[0]?.id;
 
   if (!messageId) {
-    throw new Error('No messages found');
+    throw new Error('No unread messages found from the specified sender');
   }
 
   const message = await gmail.users.messages.get({
@@ -23,7 +26,7 @@ export const getLatestEmail = async () => {
   return message.data;
 };
 
-export const sendEmail = async (to: string, subject: string, body: string) => {
+export async function sendEmail(to: string, subject: string, body: string) {
   const encodedMessage = Buffer.from(
     `To: ${to}\r\n` +
     `Subject: ${subject}\r\n\r\n` +
@@ -36,4 +39,142 @@ export const sendEmail = async (to: string, subject: string, body: string) => {
       raw: encodedMessage,
     },
   });
-};
+}
+
+export async function applyLabelToEmail(emailId: string, labelName: string) {
+  try {
+    const res = await gmail.users.labels.list({ userId: 'me' });
+    let label = res.data.labels?.find(l => l.name === labelName);
+
+    if (!label) {
+      const createRes = await gmail.users.labels.create({
+        userId: 'me',
+        requestBody: {
+          name: labelName,
+          labelListVisibility: 'labelShow',
+          messageListVisibility: 'show'
+        }
+      });
+      label = createRes.data;
+    }
+
+    await gmail.users.messages.modify({
+      userId: 'me',
+      id: emailId,
+      requestBody: {
+        addLabelIds: [label.id!],
+        removeLabelIds: ['UNREAD']
+      }
+    });
+
+    console.log(`Applied label ${labelName} to email ${emailId}`);
+  } catch (error) {
+    console.error('Error applying label:', error);
+  }
+}
+
+export async function processEmail(senderEmail: string) {
+  try {
+    const email = await getLatestEmailFromSender(senderEmail);
+    const subject = email.payload?.headers?.find(h => h.name?.toLowerCase() === 'subject')?.value || 'No Subject';
+    const content = email.snippet || '';
+
+    const category = await categorizeEmail(subject, content);
+    const response = await generateResponse(category, subject, content);
+
+    await sendEmail(senderEmail, `Re: ${subject}`, response);
+    await applyLabelToEmail(email.id!, category);
+
+    return `Email processed. Category: ${category}, Response sent.`;
+  } catch (error) {
+    console.error('Error processing email:', error);
+    return 'Error processing email';
+  }
+}
+// import { google } from 'googleapis';
+// import { oauth2Client } from './authService';
+// import { categorizeEmail, generateResponse } from './aiService';
+
+// const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+
+// export const getLatestEmail = async () => {
+//   const response = await gmail.users.messages.list({
+//     userId: 'me',
+//     maxResults: 1,
+//   });
+
+//   const messageId = response.data.messages?.[0].id;
+
+//   if (!messageId) {
+//     throw new Error('No messages found');
+//   }
+
+//   const message = await gmail.users.messages.get({
+//     userId: 'me',
+//     id: messageId,
+//   });
+
+//   return message.data;
+// };
+// export async function sendEmail(to: string, subject: string, body: string) {
+//   const encodedMessage = Buffer.from(
+//     `To: ${to}\r\n` +
+//     `Subject: ${subject}\r\n\r\n` +
+//     `${body}`
+//   ).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+//   await gmail.users.messages.send({
+//     userId: 'me',
+//     requestBody: {
+//       raw: encodedMessage,    },
+//   });
+// }
+
+// export async function applyLabelToEmail(emailId: string, labelName: string) {
+//   try {
+//     // First, check if the label exists
+//     const res = await gmail.users.labels.list({ userId: 'me' });
+//     let label = res.data.labels?.find(l => l.name === labelName);
+
+//     // If the label doesn't exist, create it
+//     if (!label) {
+//       const createRes = await gmail.users.labels.create({
+//         userId: 'me',
+//         requestBody: {
+//           name: labelName,
+//           labelListVisibility: 'labelShow',
+//           messageListVisibility: 'show'
+//         }
+//       });
+//       label = createRes.data;
+//     }
+
+//     // Apply the label to the email
+//     await gmail.users.messages.modify({
+//       userId: 'me',
+//       id: emailId,
+//       requestBody: {
+//         addLabelIds: [label.id!]
+//       }
+//     });
+
+//     console.log(`Applied label ${labelName} to email ${emailId}`);
+//   } catch (error) {
+//     console.error('Error applying label:', error);
+//   }
+// }
+// // export const sendEmail = async (to: string, subject: string, body: string) => {
+// //   const encodedMessage = Buffer.from(
+// //     `To: ${to}\r\n` +
+// //     `Subject: ${subject}\r\n\r\n` +
+// //     `${body}`
+// //   ).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+// //   await gmail.users.messages.send({
+// //     userId: 'me',
+// //     requestBody: {
+// //       raw: encodedMessage,
+// //     },
+// //   });
+// // };
