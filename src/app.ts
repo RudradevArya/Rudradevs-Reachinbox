@@ -4,6 +4,7 @@ import { getOutlookAuthUrl, getOutlookToken, verifyOutlookToken } from './outloo
 import { processEmail as processGmailEmail } from './emailService';
 import { processEmail as processOutlookEmail } from './outlookEmailService';
 import { config } from './config';
+import './auto'; 
 
 const app = express();
 const port = 3000;
@@ -90,4 +91,5 @@ app.get('/process-email/:provider', async (req, res) => {
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
+  console.log('Automated email processing is active.');
 });
