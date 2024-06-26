@@ -1,4 +1,4 @@
-//app.ts
+
 import express from 'express';
 import { getAuthUrl, getToken } from './authService';
 // import { getLatestEmail, sendEmail,applyLabelToEmail } from './emailService';
