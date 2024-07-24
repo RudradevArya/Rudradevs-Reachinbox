@@ -18,6 +18,7 @@ Open AI Email Assistant using a Node.js application that automates email process
 - OpenAI API key 
 
 ## Folder Structure
+```bash
 Rudradev-s-inbox/
 │
 ├── src/
@@ -33,6 +34,7 @@ Rudradev-s-inbox/
 ├── package.json
 ├── tsconfig.json
 └── README.md
+```
 
 ## Setup
 
